@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rule-Based POS Tagging Reviewer</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b1f2a;--mu:#5d6475;--ac:#4f46e5;--ok:#15803d;--no:#b91c1c;--bd:#dfe3ee;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12141c;--card:#1b1e29;--tx:#e8eaf2;--mu:#9aa1b5;--ac:#8b85ff;--ok:#4ade80;--no:#f87171;--bd:#2c3040}}
+:root[data-theme="dark"]{--bg:#12141c;--card:#1b1e29;--tx:#e8eaf2;--mu:#9aa1b5;--ac:#8b85ff;--ok:#4ade80;--no:#f87171;--bd:#2c3040}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:22px 16px 8px;max-width:960px;margin:auto}h1{margin:0;font-size:1.6rem}header p{margin:4px 0;color:var(--mu)}
+nav{display:flex;gap:6px;flex-wrap:wrap;max-width:960px;margin:8px auto;padding:0 16px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5}
+nav button{border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:8px 14px;border-radius:99px;cursor:pointer;font:inherit}
+nav button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+main{max-width:960px;margin:auto;padding:8px 16px 40px}section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;margin:10px 0}
+details.card summary{cursor:pointer;font-weight:600}details.card[open] summary{margin-bottom:6px;color:var(--ac)}
+h2{font-size:1.2rem;margin:18px 0 6px}code,.mono{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);padding:1px 6px;border-radius:5px}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.92rem}th,td{border-bottom:1px solid var(--bd);padding:6px 8px;text-align:left}th{color:var(--mu)}
+input[type=text]{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx);font:inherit}
+.btn{background:var(--ac);color:#fff;border:0;padding:9px 16px;border-radius:8px;cursor:pointer;font:inherit;margin-top:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.chip{border:1px solid var(--bd);border-radius:10px;padding:6px 10px;text-align:center;background:var(--card)}
+.chip b{display:block;color:var(--ac)}.chip small{display:block;color:var(--mu);font-size:.7rem}
+.opt{display:block;width:100%;text-align:left;margin:6px 0;padding:10px 12px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx);cursor:pointer;font:inherit}
+.opt:hover{border-color:var(--ac)}.opt.ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 18%,transparent)}.opt.no{border-color:var(--no);background:color-mix(in srgb,var(--no) 18%,transparent)}
+.bar{height:8px;background:var(--bd);border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac);width:0;transition:width .3s}
+.fb.ok{color:var(--ok)}.fb.no{color:var(--no)}.tag{color:var(--ac);font-weight:600}.mu{color:var(--mu)}
+</style></head><body>
+<header><h1>Rule-Based POS Tagging — Interactive Reviewer</h1><p>Concepts · Tagsets · Live rule tagger · Applications · 60-item quiz</p></header>
+<nav id="nav"></nav>
+<main>
+<section id="s0"></section>
+<section id="s1"><div class="card"><input type="text" id="flt" placeholder="Filter Penn Treebank tags (e.g. VB, noun, past)"></div><div class="card scroll"><table id="tt"></table></div>
+<h2>Universal POS (UPOS) — 17 tags</h2><div class="card" id="upos"></div></section>
+<section id="s2"><div class="card"><b>Try the mini rule-based tagger.</b> It uses (1) a lexicon lookup, (2) suffix/capitalization guesses for unknown words, then (3) contextual transformation rules.<input type="text" id="sin" value="The student wants to book a flight quickly."><button class="btn" id="go">Tag it</button><div class="chips" id="out"></div></div>
+<div class="card"><b>Rules used</b><ol><li>Lexicon: first listed tag is the initial tag.</li><li>Unknown: digits→CD; capitalized mid-sentence→NNP; -ly→RB; -ing→VBG; -ed→VBD; -ous/-ful/-able/-ive→JJ; -s→NNS; else NN.</li><li>R1: VB/VBP after DT or PRP$ → NN.</li><li>R2: NN after TO → VB.</li><li>R3: NN/VBP after MD → VB.</li><li>R4: VBD after was/were/is/are/has/have/had/be → VBN.</li></ol><p class="mu">Try: “She can swim”, “I want to play”, “The book was written”, “They have eaten”.</p></div></section>
+<section id="s3"></section>
+<section id="s4"><div class="card" id="q"></div></section>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const concepts=[
+["What is POS tagging?","<b>Part-of-speech (POS) tagging</b> assigns a grammatical category (noun, verb, adjective, etc.) to every token in a text. Input: tokens. Output: (word, tag) pairs, e.g. <code>The/DT cat/NN sleeps/VBZ ./.</code> It is a core step of the NLP pipeline (after tokenization, before parsing)."],
+["What is rule-based tagging?","A tagger that relies on <b>hand-written linguistic rules</b> plus a <b>lexicon (dictionary)</b> instead of probabilities learned from data. It is <b>deterministic</b>: the same input always gives the same output, and every decision can be traced to a rule."],
+["Two-stage architecture","<b>Stage 1 – Lexicon lookup:</b> assign every word all its possible tags (e.g. <i>book</i> → NN, VB). <b>Stage 2 – Disambiguation:</b> apply rules to remove wrong tags using context until one remains. Classic systems: <b>TAGGIT</b> (Greene &amp; Rubin, 1971) and <b>ENGTWOL</b> (Constraint Grammar, Voutilainen/Karlsson)."],
+["Constraint Grammar (ENGTWOL)","Uses a large two-level morphological lexicon and ~1,100 <b>elimination constraints</b> such as “discard VB if the previous word is an unambiguous determiner.” Rules <i>eliminate</i> readings rather than choose one directly."],
+["Brill tagger (transformation-based)","A hybrid, error-driven approach: (1) <b>initial-state annotator</b> tags each word with its most frequent tag; (2) <b>ordered transformation rules</b> of the form “change tag A to B when [context]” are learned from a tagged corpus and applied in sequence. Example: <i>Change NN to VB when the previous tag is TO.</i> Rules stay human-readable."],
+["Ambiguity","A word with more than one possible tag is <b>ambiguous</b>: <i>book</i> (NN/VB), <i>can</i> (MD/NN/VB), <i>back</i> (NN/RB/JJ/VB). Roughly 40% of running tokens in English are ambiguous even though most vocabulary types are not. Context decides."],
+["Unknown (OOV) words","Words not in the lexicon. Handled with <b>morphological rules</b> (suffixes: -ing→VBG, -ed→VBD, -ly→RB, -s→NNS), <b>orthographic cues</b> (capitalization→NNP, digits→CD, hyphens), and default to NN."],
+["Types of rules","<b>Lexical</b> (dictionary tags) · <b>Morphological/suffix</b> · <b>Orthographic</b> (capitalization, digits) · <b>Contextual</b> (neighboring tags/words) · <b>Constraint/elimination</b> rules."],
+["Open vs closed classes","<b>Open class</b> (nouns, verbs, adjectives, adverbs): accept new words (<i>selfie, google</i>). <b>Closed class / function words</b> (determiners, prepositions, pronouns, conjunctions, modals): small fixed sets—easy to list in a lexicon."],
+["Tagset","The inventory of allowed tags. <b>Penn Treebank</b> (36 tags + punctuation) is the most common for English; <b>Brown</b> (~87 tags); <b>UPOS</b> (17 universal tags) for cross-lingual work. Larger tagsets give finer detail but harder disambiguation."],
+["Baseline & evaluation","<b>Most-frequent-tag baseline</b> (unigram) reaches ~90% accuracy. Metric: <b>tagging accuracy</b> = correct tags ÷ total tokens. Modern taggers reach ~97% on English; accuracy on unknown words is reported separately."],
+["Advantages","Interpretable and debuggable · no large annotated corpus needed to start · deterministic · fast · good for low-resource or domain-specific languages when a linguist is available."],
+["Disadvantages","Writing and maintaining rules is <b>labor-intensive</b> · rules are language- and domain-specific · hard to cover exceptions/rule interactions · generally less accurate than statistical (HMM, CRF) or neural taggers · poor robustness to noisy text."],
+["Rule-based vs statistical vs neural","<b>Rule-based:</b> linguist rules. <b>Stochastic:</b> HMM/MEMM/CRF learn tag probabilities (Viterbi decoding). <b>Neural:</b> BiLSTM/Transformer models. <b>Hybrid:</b> Brill learns rules from data."],
+["Pipeline position","Raw text → sentence splitting → <b>tokenization</b> → <b>POS tagging</b> → lemmatization / chunking / parsing / NER. Tagging quality affects every later step."]];
+const apps=[["Parsing & chunking","POS tags feed syntactic parsers and noun-phrase chunkers."],["Information extraction & NER","Proper nouns (NNP) and noun phrases are candidate entities."],["Machine translation","Resolves ambiguous words (<i>book</i> noun vs verb) to choose the right translation."],["Text-to-speech","Pronunciation depends on tag: <i>REcord</i> (NN) vs <i>reCORD</i> (VB)."],["Lemmatization & stemming","Correct lemma needs the tag: <i>saw</i>→see (VBD) vs saw (NN)."],["Question answering & IR","Wh-words, nouns and verbs help classify questions and weight query terms."],["Sentiment analysis","Adjectives and adverbs carry opinion words."],["Spell/grammar checking","Detects wrong word class patterns (e.g. “their” vs “there”)."],["Word-sense disambiguation","POS narrows the possible senses of a word."],["Low-resource languages","Hand-built rules and lexicons for Tagalog, Ilocano, etc. when no big corpus exists."]];
+$('#s0').innerHTML=concepts.map((c,i)=>`<details class="card" ${i<2?'open':''}><summary>${c[0]}</summary><div>${c[1]}</div></details>`).join('');
+$('#s3').innerHTML='<h2>Applications</h2>'+apps.map(a=>`<div class="card"><b>${a[0]}</b><br>${a[1]}</div>`).join('')+'<h2>Worked example</h2><div class="card"><p>Sentence: <i>I want to book a flight.</i></p><p>Stage 1 (lexicon): I/PRP · want/VB,VBP · to/TO · book/NN,VB · a/DT · flight/NN</p><p>Stage 2 (rules): <i>VB after PRP → VBP</i> ⇒ want/VBP. <i>NN after TO → VB</i> ⇒ book/VB.</p><p class="tag">I/PRP want/VBP to/TO book/VB a/DT flight/NN ./.</p></div>';
+const PT=[["CC","Coordinating conjunction","and, but, or"],["CD","Cardinal number","one, 3, 2026"],["DT","Determiner","the, a, this"],["EX","Existential there","there is"],["FW","Foreign word","et cetera"],["IN","Preposition / subordinating conj.","in, of, because"],["JJ","Adjective","big, red"],["JJR","Adjective, comparative","bigger"],["JJS","Adjective, superlative","biggest"],["LS","List item marker","1), a)"],["MD","Modal","can, will, should"],["NN","Noun, singular/mass","dog, water"],["NNS","Noun, plural","dogs"],["NNP","Proper noun, singular","Manila, Maria"],["NNPS","Proper noun, plural","Filipinos"],["PDT","Predeterminer","all, both (the)"],["POS","Possessive ending","’s"],["PRP","Personal pronoun","I, he, they"],["PRP$","Possessive pronoun","my, his, their"],["RB","Adverb","quickly, very, not"],["RBR","Adverb, comparative","faster"],["RBS","Adverb, superlative","fastest"],["RP","Particle","give up"],["SYM","Symbol","%, &, +"],["TO","the word “to”","to go, to school"],["UH","Interjection","oh, wow"],["VB","Verb, base form","eat, be"],["VBD","Verb, past tense","ate, was"],["VBG","Verb, gerund / present participle","eating"],["VBN","Verb, past participle","eaten, written"],["VBP","Verb, non-3rd-person singular present","I eat"],["VBZ","Verb, 3rd-person singular present","he eats"],["WDT","Wh-determiner","which, that"],["WP","Wh-pronoun","who, what"],["WP$","Possessive wh-pronoun","whose"],["WRB","Wh-adverb","where, when, how"]];
+const draw=f=>{f=(f||'').toLowerCase();$('#tt').innerHTML='<tr><th>Tag</th><th>Meaning</th><th>Examples</th></tr>'+PT.filter(r=>r.join(' ').toLowerCase().includes(f)).map(r=>`<tr><td class="tag">${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')+(f?'':'<tr><td class="tag">. , : “ ”</td><td>Punctuation tags ( . sentence-final, “,” comma, “:” colon, quotes, brackets)</td><td>. , ; ( )</td></tr>')};
+draw();$('#flt').oninput=e=>draw(e.target.value);
+$('#upos').innerHTML='<p><b>Open:</b> ADJ, ADV, INTJ, NOUN, PROPN, VERB · <b>Closed:</b> ADP, AUX, CCONJ, DET, NUM, PART, PRON, SCONJ · <b>Other:</b> PUNCT, SYM, X</p><p class="mu">Mapping examples: NN/NNS→NOUN, NNP→PROPN, VB/VBD/VBG→VERB, MD→AUX, IN→ADP/SCONJ, DT→DET, CC→CCONJ, RB→ADV, CD→NUM, PRP→PRON.</p>';
+// mini tagger
+const L={the:'DT',a:'DT',an:'DT',this:'DT',that:'DT',some:'DT',he:'PRP',she:'PRP',it:'PRP',i:'PRP',we:'PRP',they:'PRP',you:'PRP',his:'PRP$',her:'PRP$',their:'PRP$',my:'PRP$',our:'PRP$',is:'VBZ',are:'VBP',am:'VBP',was:'VBD',were:'VBD',has:'VBZ',have:'VBP',had:'VBD',be:'VB',to:'TO',can:'MD',will:'MD',should:'MD',would:'MD',and:'CC',but:'CC',or:'CC',in:'IN',on:'IN',at:'IN',of:'IN',with:'IN',for:'IN',from:'IN',by:'IN',not:'RB',very:'RB',fast:'RB',there:'EX',who:'WP',what:'WP',dog:'NN',cat:'NN',book:'NN',play:'NN',walk:'NN',flight:'NN',student:'NN',school:'NN',boy:'NN',girl:'NN',letter:'NN',red:'JJ',big:'JJ',old:'JJ',good:'JJ',tall:'JJ',ran:'VBD',ate:'VBD',saw:'VBD',eaten:'VBN',written:'VBN',sleeps:'VBZ',likes:'VBZ',wants:'VBZ',want:'VBP',like:'VBP',eat:'VBP',swim:'VB',go:'VB',read:'VB'};
+function tagger(t){const w=t.match(/[A-Za-z0-9$'’-]+|[.,!?;:]/g)||[];const r=w.map((x,i)=>{const l=x.toLowerCase();let g,y;
+if(/^[.!?]$/.test(x))[g,y]=['.','punctuation'];else if(/^[,;:]$/.test(x))[g,y]=[x==','?',':':','punctuation'];
+else if(L[l])[g,y]=[L[l],'lexicon'];else if(/^\d/.test(x))[g,y]=['CD','digits'];else if(/^[A-Z]/.test(x)&&i>0)[g,y]=['NNP','capitalized'];
+else if(/ly$/.test(l))[g,y]=['RB','-ly'];else if(/ing$/.test(l))[g,y]=['VBG','-ing'];else if(/ed$/.test(l))[g,y]=['VBD','-ed'];else if(/(ous|ful|able|ive)$/.test(l))[g,y]=['JJ','suffix'];else if(/[^s]s$/.test(l))[g,y]=['NNS','-s'];else [g,y]=['NN','default'];return{x,g,y}});
+r.forEach((o,i)=>{const p=r[i-1]&&r[i-1].g,pw=r[i-1]&&r[i-1].x.toLowerCase();
+if((p=='DT'||p=='PRP$')&&(o.g=='VB'||o.g=='VBP')){o.g='NN';o.y='R1'}
+else if(p=='TO'&&o.g=='NN'){o.g='VB';o.y='R2'}
+else if(p=='MD'&&(o.g=='NN'||o.g=='VBP')){o.g='VB';o.y='R3'}
+else if(o.g=='VBD'&&['was','were','is','are','has','have','had','be'].includes(pw)){o.g='VBN';o.y='R4'}});return r}
+const run=()=>{$('#out').innerHTML=tagger($('#sin').value).map(o=>`<div class="chip">${o.x}<b>${o.g}</b><small>${o.y}</small></div>`).join('')};
+$('#go').onclick=run;$('#sin').onkeydown=e=>{if(e.key=='Enter')run()};run();
+// quiz data
+const ID=[["The process of assigning a grammatical category to each token in a text.",["postagging","partofspeechtagging","postag","tagging"]],["A tagger built on hand-written linguistic rules and a lexicon.",["rulebased","rulebasedtagger","rulebasedpostagging","rulebasedtagging"]],["Penn Treebank tag for a singular common noun.",["nn"]],["Penn Treebank tag for a past-tense verb.",["vbd"]],["Penn Treebank tag for an adjective.",["jj"]],["Penn Treebank tag for a determiner.",["dt"]],["Penn Treebank tag for a gerund / present participle.",["vbg"]],["Penn Treebank tag for a singular proper noun.",["nnp"]],["Penn Treebank tag for a modal verb such as can or will.",["md"]],["Penn Treebank tag for a coordinating conjunction.",["cc"]],["Word classes with small, fixed membership (determiners, prepositions, pronouns).",["closedclass","closed","functionwords","functionword","closedclasswords"]],["A word that can take more than one possible tag (e.g. ‘book’).",["ambiguous","ambiguity","lexicalambiguity","posambiguity","ambiguousword"]],["Rule-based/hybrid tagger using ordered transformation rules, created by Eric ____.",["brill","brilltagger","transformationbasedtagger","tbl"]],["Stage 1 of two-stage tagging, where all possible tags are assigned from a dictionary.",["lexiconlookup","dictionarylookup","lexicon","dictionary","initialtagging"]],["Words not found in the lexicon.",["unknownwords","unknownword","oov","outofvocabulary","outofvocabularywords"]],["The tag usually guessed for an unknown word ending in -ly.",["rb"]],["Penn Treebank tag for the word ‘to’.",["to"]],["The universal tagset with 17 coarse categories (abbreviation).",["upos","universalpos","universalpostags","universaltagset","universaldependencies"]],["The step that splits text into tokens before tagging.",["tokenization","tokenizing","tokenisation"]],["Baseline that assigns each word its most frequent tag.",["mostfrequenttag","mostfrequenttagbaseline","unigram","unigramtagger","baseline"]]];
+const MC=[ // [q, correct, w1, w2, w3] (options shuffled)
+["APPLICATION · Which is a real disadvantage of rule-based tagging?","Writing and maintaining rules takes heavy manual effort","It needs a huge labeled corpus to run","Its output changes randomly between runs","It cannot use a dictionary"],
+["APPLICATION · Which is an advantage of rule-based tagging?","Decisions are transparent and traceable to a rule","It always beats neural taggers","It never makes mistakes on unknown words","It needs no lexicon"],
+["APPLICATION · Rule: ‘If previous tag is DT, change VB to NN.’ Which phrase does it fix?","the book","to book","can book","they book"],
+["APPLICATION · A Brill tagger’s initial-state annotator typically assigns…","each word’s most frequent tag","a random tag","the tag NNP to all words","the tag of the previous word"],
+["APPLICATION · The general form of a Brill transformation is…","Change tag A to tag B when a context condition holds","Multiply tag probabilities along a path","Assign the tag with the highest embedding","Delete the word if tagged NN"],
+["APPLICATION · A rule-based tagger meets the unknown word ‘blogging’. Best guess?","VBG","NNP","RB","CD"],
+["APPLICATION · Mid-sentence, unknown, capitalized word ‘Vigan’. Best guess?","NNP","NN","VB","JJ"],
+["APPLICATION · Which application needs POS to pronounce ‘record’ correctly?","Text-to-speech","Spell checking","Image captioning","File compression"],
+["APPLICATION · Why does lemmatization benefit from POS tags?","The lemma of ‘saw’ differs for noun vs verb","Tags remove stop words","Tags translate words","Tags shorten sentences"],
+["APPLICATION · Why are rule-based taggers attractive for low-resource languages?","They can start from a lexicon and linguist rules without a big annotated corpus","They need billions of tokens","They are always more accurate","They avoid tokenization"],
+["APPLICATION · Which is NOT a rule-based technique?","Estimating tag transition probabilities with an HMM","Suffix rules","Contextual transformation rules","Constraint-grammar elimination"],
+["APPLICATION · How does information extraction use POS tags?","To find noun phrases/proper nouns as candidate entities","To compress documents","To rank images","To encrypt text"],
+["APPLICATION · Which tagger is statistical rather than rule-based?","HMM tagger","ENGTWOL","TAGGIT","Brill tagger"],
+["APPLICATION · In the Brill tagger, learned rules are applied…","in the order they were learned, one after another","all at once in any order","only to unknown words","only to nouns"],
+["APPLICATION · ‘I want to run’ with run/NN. Which rule corrects it?","Change NN to VB if previous tag is TO","Change VB to NN if previous tag is DT","Change NN to NNP if capitalized","Change VBD to VBN after ‘was’"],
+["APPLICATION · The resource listing the possible tags of each word is the…","lexicon","treebank parser","stemmer","tokenizer"],
+["APPLICATION · Why is ‘can’ hard to tag?","It can be a modal (MD) or a noun (NN)","It is a proper noun","It is always unknown","It has no tag"],
+["APPLICATION · How does POS help machine translation?","Chooses the right translation for ambiguous words","Replaces the dictionary","Removes punctuation","Counts sentences"],
+["APPLICATION · How can POS tags help information retrieval?","Weight nouns/verbs in queries more than function words","Delete all adjectives","Convert queries to images","Block repeated searches"],
+["APPLICATION · Same sentence, same lexicon, same rules, run twice. A rule-based tagger gives…","Identical output (deterministic)","Different output each time","Output that depends on a random seed","No output"],
+["OUTPUT · Tag sequence for ‘The cat sleeps.’","DT NN VBZ","DT VB NNS","JJ NN VBP","DT NN VBG"],
+["OUTPUT · Tag sequence for ‘She quickly ran.’","PRP RB VBD","NNP JJ VBN","PRP JJ VB","DT RB VBD"],
+["OUTPUT · Tag of ‘can’ in ‘I can swim.’","MD","NN","VB","JJ"],
+["OUTPUT · Tag of ‘book’ in ‘Please book a flight.’","VB","NN","NNS","JJ"],
+["OUTPUT · Tag of ‘book’ in ‘The book is red.’","NN","VB","VBP","RB"],
+["OUTPUT · Tag of ‘running’ in ‘He is running fast.’","VBG","VBN","NN","VBZ"],
+["OUTPUT · Tag of ‘Manila’ in ‘We visited Manila.’","NNP","NN","NNS","JJ"],
+["OUTPUT · Tag of ‘happier’ in ‘She is happier.’","JJR","JJS","RBR","JJ"],
+["OUTPUT · Tag of ‘best’ in ‘He is the best player.’","JJS","JJR","RBS","JJ"],
+["OUTPUT · Tag of ‘dogs’ in ‘Dogs bark.’","NNS","NN","NNP","VBZ"],
+["OUTPUT · Tag of ‘bark’ in ‘Dogs bark.’","VBP","VBZ","NN","VBG"],
+["OUTPUT · Tag of ‘written’ in ‘The letter was written.’","VBN","VBD","VBG","JJR"],
+["OUTPUT · Tag of ‘to’ in ‘She went to school.’","TO","IN","RP","VB"],
+["OUTPUT · Tag of ‘3’ in ‘I have 3 cats.’","CD","NN","JJ","LS"],
+["OUTPUT · Tag of ‘who’ in ‘The boy who ran left.’","WP","WDT","WRB","PRP"],
+["OUTPUT · Tag of ‘his’ in ‘his book’","PRP$","PRP","POS","WP$"],
+["OUTPUT · Tag of ‘there’ in ‘There is a cat.’","EX","RB","DT","IN"],
+["OUTPUT · Tag sequence for ‘Birds fly high.’","NNS VBP RB","NN VBZ JJ","NNP VB RB","NNS VBD RBR"],
+["OUTPUT · Initial tags: I/PRP want/VBP to/TO run/NN. Final tag of ‘run’ after rule ‘NN→VB after TO’?","VB","NN","VBP","VBG"],
+["OUTPUT · ‘They have eaten.’ Tag of ‘eaten’ after rule ‘VBD→VBN after have’ (initial VBD)?","VBN","VBD","VBG","VBZ"]];
+const DISP=['POS tagging','Rule-based tagger','NN','VBD','JJ','DT','VBG','NNP','MD','CC','Closed class','Ambiguity','Brill tagger','Lexicon lookup','Unknown (OOV) words','RB','TO','UPOS','Tokenization','Most-frequent-tag baseline'];
+const Q=[...ID.map((x,i)=>({t:'ID',q:x[0],a:x[1],d:DISP[i]})),...MC.map(x=>({t:x[0].split(' ·')[0],q:x[0].split(' · ')[1],a:x[1],o:x.slice(1)}))].map((x,i)=>(x.t=x.t=='ID'?'IDENTIFICATION':x.t,x));
+const names={IDENTIFICATION:'Identification',APPLICATION:'Application',OUTPUT:'Determine the output'};
+let qi=0,sc={},ans=[];
+const norm=s=>s.toLowerCase().replace(/[^a-z$]/g,'');
+const shuf=a=>a.map(v=>[Math.random(),v]).sort((x,y)=>x[0]-y[0]).map(x=>x[1]);
+function show(){const el=$('#q');if(qi>=Q.length){const tot=ans.filter(Boolean).length;const sec=Object.keys(names).map(k=>{const n=Q.filter(x=>x.t==k).length;return`<tr><td>${names[k]}</td><td>${sc[k]||0} / ${n}</td></tr>`}).join('');el.innerHTML=`<h2>Finished!</h2><p style="font-size:1.4rem"><b>${tot} / ${Q.length}</b> (${Math.round(tot/Q.length*100)}%)</p><table>${sec}</table><button class="btn" id="rs">Retake</button>`;$('#rs').onclick=()=>{qi=0;sc={};ans=[];show()};return}
+const q=Q[qi];let h=`<div class="bar"><i style="width:${qi/Q.length*100}%"></i></div><p class="mu">${names[q.t]} · Question ${qi+1} of ${Q.length} · Score ${ans.filter(Boolean).length}</p><h3>${q.q}</h3>`;
+if(q.t=='IDENTIFICATION')h+='<input type="text" id="ai" placeholder="Type your answer (tag or term)" autocomplete="off"><button class="btn" id="sb">Submit</button>';
+else h+=shuf(q.o).map(o=>`<button class="opt">${o}</button>`).join('');
+el.innerHTML=h+'<div id="fb"></div>';
+const fin=ok=>{ans[qi]=ok;if(ok)sc[q.t]=(sc[q.t]||0)+1;$('#fb').innerHTML=`<p class="fb ${ok?'ok':'no'}"><b>${ok?'Correct!':'Not quite.'}</b>${ok?'':' Answer: <b>'+(q.t=='IDENTIFICATION'?q.d:q.a)+'</b>'}</p><button class="btn" id="nx">${qi==Q.length-1?'See results':'Next'}</button>`;$('#nx').onclick=()=>{qi++;show()}};
+if(q.t=='IDENTIFICATION'){const sub=()=>{const v=norm($('#ai').value);if(!v)return;$('#ai').disabled=true;$('#sb').remove();fin(q.a.includes(v))};$('#sb').onclick=sub;$('#ai').onkeydown=e=>{if(e.key=='Enter')sub()};$('#ai').focus()}
+else document.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{document.querySelectorAll('.opt').forEach(x=>{x.disabled=true;if(x.textContent==q.a)x.classList.add('ok')});const ok=b.textContent==q.a;if(!ok)b.classList.add('no');fin(ok)})}
+show();
+// nav
+const tabs=['Concepts','Tags','Live Tagger','Applications','Quiz (60)'];
+$('#nav').innerHTML=tabs.map((t,i)=>`<button data-i="${i}">${t}</button>`).join('');
+const go=i=>{document.querySelectorAll('section').forEach((s,j)=>s.classList.toggle('on',i==j));document.querySelectorAll('nav button').forEach((b,j)=>b.classList.toggle('on',i==j))};
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>go(+b.dataset.i));go(0);
+</script></body></html>
